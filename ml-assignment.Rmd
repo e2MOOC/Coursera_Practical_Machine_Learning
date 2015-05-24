@@ -1,0 +1,153 @@
+---
+title: "ml-assignment"
+author: "Eterna2"
+date: "Sunday, May 24, 2015"
+output: html_document
+---
+
+## Summary
+The objective of the project is to predict the quality (how correct the technique is) of the weight lifting exercise from sensor data. Feature selection was done by removing highly correlated predictors, followed by a backwards feature selection for random forest with 10 fold cross-validation. The final model has 500 trees with 7 variables at each split.
+
+We were able to achieve a 0.25% out-of-bag estimate of the error rate. And successfully predicted all 20 test samples provided. 
+
+## Environment Setup
+```{r,message=FALSE}
+# ensure the results are repeatable
+set.seed(2)
+# load the library
+library(caret)
+library(ggplot2)
+```
+
+## Data Preparation
+The training set is loaded and examined (Appendix A).
+```{r}
+# load training data
+training <- read.csv("pml-training.csv")
+training$classe <- as.factor(training$classe)
+```
+
+The training set is subset to remove features that are not very useful - those that are too sparse or are sub-features (e.g. kurtosis, skewness, min, max, average, stdev, var, etc) or not likely to be relevant for the class prediction (e.g. user name, timestamp, window, etc).
+```{r}
+# keep only relevant features
+training.sub <- subset(training,select=c(
+  classe,
+  roll_belt,  
+  pitch_belt,	
+  yaw_belt,
+  total_accel_belt,
+  gyros_belt_x,
+  gyros_belt_y,
+  gyros_belt_z,
+  accel_belt_x,
+  accel_belt_y,
+  accel_belt_z,
+  magnet_belt_x,
+  magnet_belt_y,
+  magnet_belt_z,
+  roll_arm,
+  pitch_arm,
+  yaw_arm,
+  total_accel_arm,
+  gyros_arm_x,
+  gyros_arm_y,
+  gyros_arm_z,
+  accel_arm_x,
+  accel_arm_y,
+  accel_arm_z,
+  magnet_arm_x,
+  magnet_arm_y,
+  magnet_arm_z,
+  roll_dumbbell,
+  pitch_dumbbell,	
+  yaw_dumbbell,
+  total_accel_dumbbell,
+  gyros_dumbbell_x,
+  gyros_dumbbell_y,
+  gyros_dumbbell_z,
+  accel_dumbbell_x,
+  accel_dumbbell_y,
+  accel_dumbbell_z,
+  magnet_dumbbell_x,
+  magnet_dumbbell_y,
+  magnet_dumbbell_z,
+  roll_forearm,
+  pitch_forearm,
+  yaw_forearm,
+  total_accel_forearm,
+  gyros_forearm_x,
+  gyros_forearm_y,
+  gyros_forearm_z,
+  accel_forearm_x,
+  accel_forearm_y,
+  accel_forearm_z,
+  magnet_forearm_x,
+  magnet_forearm_y,
+  magnet_forearm_z
+))
+
+```
+
+Next, we check for predictors with near zero variances. This is to prevent undue influences from such predictors during cross-validation and/or bootstrapping. Everything looks fine. 
+```{r}
+# check for zero variances
+nearZeroVar(training.sub[,-1], saveMetrics= TRUE)
+```
+
+Next, we check for and removes highly correlated predictors.
+```{r,cache=TRUE}
+# calculate correlation matrix
+correlationMatrix = cor(training.sub[,-1])
+# find attributes that are highly corrected 
+highlyCorrelated = findCorrelation(correlationMatrix, cutoff=0.75)
+# filter away highly correlated predictors
+training.sub2 = cbind(classe=training.sub[,1],(training.sub[,-1])[,-highlyCorrelated])
+# print highly correlated attributes
+print(colnames(training.sub[,-1])[highlyCorrelated])
+```
+
+As the number of features are still significant, we employed a recursive feature selection algorithm using random forest.
+```{r,cache=TRUE}
+# define the control using a random forest selection function
+control <- rfeControl(functions=rfFuncs, method="cv", number=10)
+# run the RFE algorithm
+results <- rfe(training.sub[,-1], training.sub[,1], rfeControl=control)
+```
+
+As shown in the results below, we can achieve an accuracy of 98.8% just by using 8 features. 
+```{r,cache=TRUE}
+# summarize the results
+print(results)
+# list the chosen features
+predictors(results)
+# plot the results
+plot(results, type=c("g", "o"))
+```
+
+This is the resultant model we gotten with the corresponding confusion matrix. The out-of-bag estimate of error rate is 0.25% which is a good estimate of the out of sample error rate.
+```{r,cache=TRUE}
+print(results$fit)
+```
+
+Applying the model on the test set, we get the following predictions.
+```{r,cache=TRUE}
+# load test set
+testing <- read.csv("pml-testing.csv")
+# predict the response for the test set
+answer <- predict(results, testing)
+# print prediction
+print(answer)
+```
+
+
+## Appendix A - Summary of training data
+```{r}
+# examine data
+summary(training)
+```
+
+## Appendix B - Correlation matrix
+```{r}
+# summarize the correlation matrix
+print(correlationMatrix)
+```
